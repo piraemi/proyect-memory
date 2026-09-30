@@ -13,7 +13,7 @@
     "url": "git+https://github.com/piraemi/proyect-memory.git"
   },
   "keywords": [],
-  "type": "commonjs",
+  "type": "module",
   "bugs": {
     "url": "https://github.com/piraemi/proyect-memory/issues"
   },
