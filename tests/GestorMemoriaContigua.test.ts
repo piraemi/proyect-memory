@@ -23,3 +23,4 @@ describe('GestorMemoriaContigua - consultas', () => {
     expect(gestor.obtenerMapa().length).toBe(1);
   });
 });
+
