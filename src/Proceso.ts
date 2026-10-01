@@ -41,7 +41,6 @@ export class Proceso implements IProcesoInfo, IProcesoMemoria, IProcesoCpu {
     this.renovarQuantum();
   }
 
-
   ejecutarTick(): void {
     exigir(this.obtenerEstado() === EstadoProceso.EJECUTANDO, `P${this.obtenerPid()} no está ejecutando`);
     exigir(!this.haFinalizado(), `P${this.obtenerPid()} ya terminó su CPU`);
@@ -57,7 +56,6 @@ export class Proceso implements IProcesoInfo, IProcesoMemoria, IProcesoCpu {
     exigir(this.haFinalizado(), `P${this.obtenerPid()} todavía tiene CPU por usar`);
     this.cambiarEstado(EstadoProceso.TERMINADO);
   }
-
 
   private cambiarEstado(nuevo: EstadoProceso): void {
     exigir(puedeCambiar(this.obtenerEstado(), nuevo), `P${this.obtenerPid()} no puede pasar de ${this.obtenerEstado()} a ${nuevo}`);
