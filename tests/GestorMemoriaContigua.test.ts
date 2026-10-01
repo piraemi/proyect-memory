@@ -24,3 +24,39 @@ describe('GestorMemoriaContigua - consultas', () => {
   });
 });
 
+describe('GestorMemoriaContigua - asignar y liberar', () => {
+  const mapa = (gestor: GestorMemoriaContigua) => gestor.obtenerMapa().map((b) => b.estado());
+
+  test('asignar parte el bloque libre en dos', () => {
+    const gestor = new GestorMemoriaContigua(1024, new PrimerAjuste());
+    expect(gestor.asignar(1, 100)).toBe(true);
+    expect(mapa(gestor)).toEqual(['[0-100) 100 KB pid: 1', '[100-1024) 924 KB pid: libre']);
+  });
+
+  test('si no hay hueco suficiente devuelve false y no cambia nada', () => {
+    const gestor = new GestorMemoriaContigua(400, new PrimerAjuste());
+    [1, 2, 3, 4].forEach((pid) => gestor.asignar(pid, 100));
+    gestor.liberar(1);
+    gestor.liberar(3); 
+    const antes = mapa(gestor);
+    expect(gestor.asignar(5, 150)).toBe(false);
+    expect(mapa(gestor)).toEqual(antes);
+  });
+
+  test('al liberar se unen los huecos libres pegados (coalescencia)', () => {
+    const gestor = new GestorMemoriaContigua(1024, new PrimerAjuste());
+    [1, 2, 3].forEach((pid) => gestor.asignar(pid, 100));
+    gestor.liberar(1);
+    gestor.liberar(2); 
+    expect(mapa(gestor)).toEqual(['[0-200) 200 KB pid: libre', '[200-300) 100 KB pid: 3', '[300-1024) 724 KB pid: libre']);
+    gestor.liberar(3); 
+    expect(mapa(gestor)).toEqual(['[0-1024) 1024 KB pid: libre']);
+  });
+
+  test('no se puede asignar dos veces ni liberar lo que no está', () => {
+    const gestor = new GestorMemoriaContigua(1024, new PrimerAjuste());
+    gestor.asignar(1, 100);
+    expect(() => gestor.asignar(1, 50)).toThrow();
+    expect(() => gestor.liberar(99)).toThrow();
+  });
+});
