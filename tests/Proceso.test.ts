@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { EstadoProceso } from '../src/EstadoProceso';
+import { EventoES } from '../src/EventoES';
 import { Proceso } from '../src/Proceso';
 
 describe('Proceso - creación y memoria', () => {
@@ -73,5 +74,38 @@ describe('Proceso - uso de CPU', () => {
 
   test('no puede ejecutar si no está en la CPU', () => {
     expect(() => listo().ejecutarTick()).toThrow();
+  });
+});
+
+describe('Proceso - entrada/salida', () => {
+  test('se bloquea después de los ticks indicados y vuelve a LISTO al terminar la espera', () => {
+    const p = new Proceso(1, 100, 3, new EventoES(1, 2)); // E/S después de 1 tick, dura 2
+    p.admitir();
+    p.despachar();
+    expect(p.debeBloquearse()).toBe(false);
+    p.ejecutarTick();
+    expect(p.debeBloquearse()).toBe(true);
+    p.bloquear();
+    expect(p.obtenerEstado()).toBe(EstadoProceso.BLOQUEADO);
+    p.avanzarBloqueo();
+    expect(p.esperaTerminada()).toBe(false);
+    p.avanzarBloqueo();
+    expect(p.esperaTerminada()).toBe(true);
+    p.desbloquear();
+    expect(p.obtenerEstado()).toBe(EstadoProceso.LISTO);
+    expect(p.obtenerCpuRestante()).toBe(2); // bloqueado no usó CPU
+  });
+
+  test('sin evento de E/S nunca se bloquea', () => {
+    const p = new Proceso(1, 100, 3);
+    p.admitir();
+    p.despachar();
+    p.ejecutarTick();
+    expect(p.debeBloquearse()).toBe(false);
+    expect(() => p.bloquear()).toThrow();
+  });
+
+  test('la E/S tiene que ocurrir antes de terminar', () => {
+    expect(() => new Proceso(1, 100, 3, new EventoES(3, 2))).toThrow();
   });
 });
