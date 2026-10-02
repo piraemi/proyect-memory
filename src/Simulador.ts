@@ -1,14 +1,20 @@
+import { EstadoProceso } from './EstadoProceso';
+import { GestorES } from './GestorES';
+import { GestorMemoriaContigua } from './GestorMemoriaContigua';
 import type { IAsignadorMemoria } from './IAsignadorMemoria';
+import type { IConfiguracion } from './IConfiguracion';
 import type { IConsultaMemoria } from './IConsultaMemoria';
 import type { IEventoES } from './IEventoES';
 import type { IGestorES } from './IGestorES';
 import type { IPlanificador } from './IPlanificador';
 import type { IProcesoInfo } from './IProcesoInfo';
+import { PlanificadorRoundRobin } from './PlanificadorRoundRobin';
 import { Proceso } from './Proceso';
 import { exigir } from './validaciones';
 
 type Memoria = IAsignadorMemoria & IConsultaMemoria;
 
+// El "director": en cada tick coordina memoria, CPU y E/S.
 export class Simulador {
   private tick = 0;
   private procesos: Proceso[] = [];
@@ -22,10 +28,22 @@ export class Simulador {
     this.establecerGestorES(gestorES);
   }
 
+  static crear(config: IConfiguracion): Simulador {
+    const memoria = new GestorMemoriaContigua(config.obtenerMemoriaTotal(), config.obtenerEstrategia());
+    return new Simulador(memoria, new PlanificadorRoundRobin(config.obtenerQuantum()), new GestorES());
+  }
+
   registrarProceso(pid: number, memoria: number, cpu: number, eventoES: IEventoES | null = null): void {
     exigir(this.buscar(pid) === undefined, `ya existe un proceso con pid ${pid}`);
     exigir(memoria <= this.obtenerMemoria().obtenerMemoriaTotal(), `P${pid} pide más memoria que la total`);
     this.obtenerListaProcesos().push(new Proceso(pid, memoria, cpu, eventoES));
+  }
+
+  avanzarTick(): void {
+    this.faseAdmision();
+    this.faseBloqueados();
+    this.faseCpu();
+    this.establecerTick(this.obtenerTick() + 1);
   }
 
   obtenerTick(): number { return this.tick; }
@@ -37,11 +55,37 @@ export class Simulador {
     return [...partes, ...procesos, this.obtenerMemoria().estado()].join('\n');
   }
 
+  private faseAdmision(): void {
+    this.pendientesDeMemoria().forEach((proceso) => {
+      const entro = this.obtenerMemoria().asignar(proceso.obtenerPid(), proceso.obtenerMemoriaRequerida());
+      entro && proceso.admitir();
+      entro && this.obtenerPlanificador().encolar(proceso);
+      entro || proceso.esperarMemoria();
+    });
+  }
+
+  private faseBloqueados(): void {
+    this.obtenerGestorES().avanzarTick()
+      .forEach((p) => this.obtenerPlanificador().encolar(this.buscar(p.obtenerPid())!));
+  }
+
+  private faseCpu(): void {
+    const resultado = this.obtenerPlanificador().ejecutarTick();
+    resultado.termino && this.obtenerMemoria().liberar(resultado.proceso!.obtenerPid());
+    resultado.seBloqueo && this.obtenerGestorES().agregar(resultado.proceso!);
+  }
+
+  private pendientesDeMemoria(): Proceso[] {
+    const esperando = [EstadoProceso.NUEVO, EstadoProceso.ESPERANDO_MEMORIA];
+    return this.obtenerListaProcesos().filter((p) => esperando.includes(p.obtenerEstado()));
+  }
+
   private buscar(pid: number): Proceso | undefined { return this.obtenerListaProcesos().find((p) => p.obtenerPid() === pid); }
   private obtenerListaProcesos(): Proceso[] { return this.procesos; }
   private obtenerMemoria(): Memoria { return this.memoria; }
   private obtenerPlanificador(): IPlanificador { return this.planificador; }
   private obtenerGestorES(): IGestorES { return this.gestorES; }
+  private establecerTick(tick: number): void { this.tick = tick; }
   private establecerMemoria(memoria: Memoria): void { this.memoria = memoria; }
   private establecerPlanificador(planificador: IPlanificador): void { this.planificador = planificador; }
   private establecerGestorES(gestorES: IGestorES): void { this.gestorES = gestorES; }
