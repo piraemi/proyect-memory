@@ -6,18 +6,23 @@ import type { IConfiguracion } from './IConfiguracion';
 import type { IConsultaMemoria } from './IConsultaMemoria';
 import type { IEventoES } from './IEventoES';
 import type { IGestorES } from './IGestorES';
+import type { IMetricas } from './IMetricas';
 import type { IPlanificador } from './IPlanificador';
 import type { IProcesoInfo } from './IProcesoInfo';
+import type { IConsultaSimulador, ISimulador } from './ISimulador';
+import { MetricasSimulacion } from './MetricasSimulacion';
 import { PlanificadorRoundRobin } from './PlanificadorRoundRobin';
 import { Proceso } from './Proceso';
 import { exigir } from './validaciones';
 
 type Memoria = IAsignadorMemoria & IConsultaMemoria;
 
-// El "director": en cada tick coordina memoria, CPU y E/S.
-export class Simulador {
+export class Simulador implements ISimulador, IConsultaSimulador {
   private tick = 0;
+  private ticksCpuOcupada = 0;
+  private cambiosContexto = 0;
   private procesos: Proceso[] = [];
+  private historialCpu: (number | null)[] = [];
   private memoria!: Memoria;
   private planificador!: IPlanificador;
   private gestorES!: IGestorES;
@@ -48,11 +53,15 @@ export class Simulador {
 
   obtenerTick(): number { return this.tick; }
   obtenerProcesos(): ReadonlyArray<IProcesoInfo> { return Object.freeze([...this.obtenerListaProcesos()]); }
+  obtenerHistorialCpu(): ReadonlyArray<number | null> { return Object.freeze([...this.obtenerHistorial()]); }
+  obtenerMetricas(): IMetricas {
+    return new MetricasSimulacion(this.obtenerMemoria(), this.obtenerTicksCpuOcupada(), this.obtenerTick(), this.obtenerCambiosContexto());
+  }
 
   estado(): string {
     const procesos = this.obtenerListaProcesos().map((p) => p.estado());
     const partes = [`Tick ${this.obtenerTick()}`, this.obtenerPlanificador().estado(), this.obtenerGestorES().estado()];
-    return [...partes, ...procesos, this.obtenerMemoria().estado()].join('\n');
+    return [...partes, ...procesos, this.obtenerMemoria().estado(), this.obtenerMetricas().estado()].join('\n');
   }
 
   private faseAdmision(): void {
@@ -73,6 +82,9 @@ export class Simulador {
     const resultado = this.obtenerPlanificador().ejecutarTick();
     resultado.termino && this.obtenerMemoria().liberar(resultado.proceso!.obtenerPid());
     resultado.seBloqueo && this.obtenerGestorES().agregar(resultado.proceso!);
+    this.obtenerHistorial().push(resultado.proceso?.obtenerPid() ?? null);
+    this.establecerTicksCpuOcupada(this.obtenerTicksCpuOcupada() + Number(resultado.proceso !== null));
+    this.establecerCambiosContexto(this.obtenerCambiosContexto() + Number(resultado.cambioContexto));
   }
 
   private pendientesDeMemoria(): Proceso[] {
@@ -82,10 +94,15 @@ export class Simulador {
 
   private buscar(pid: number): Proceso | undefined { return this.obtenerListaProcesos().find((p) => p.obtenerPid() === pid); }
   private obtenerListaProcesos(): Proceso[] { return this.procesos; }
+  private obtenerHistorial(): (number | null)[] { return this.historialCpu; }
+  private obtenerTicksCpuOcupada(): number { return this.ticksCpuOcupada; }
+  private obtenerCambiosContexto(): number { return this.cambiosContexto; }
   private obtenerMemoria(): Memoria { return this.memoria; }
   private obtenerPlanificador(): IPlanificador { return this.planificador; }
   private obtenerGestorES(): IGestorES { return this.gestorES; }
   private establecerTick(tick: number): void { this.tick = tick; }
+  private establecerTicksCpuOcupada(ticks: number): void { this.ticksCpuOcupada = ticks; }
+  private establecerCambiosContexto(cantidad: number): void { this.cambiosContexto = cantidad; }
   private establecerMemoria(memoria: Memoria): void { this.memoria = memoria; }
   private establecerPlanificador(planificador: IPlanificador): void { this.planificador = planificador; }
   private establecerGestorES(gestorES: IGestorES): void { this.gestorES = gestorES; }
