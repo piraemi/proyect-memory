@@ -2,6 +2,7 @@ import { EstadoProceso } from './EstadoProceso';
 import { GestorES } from './GestorES';
 import { GestorMemoriaContigua } from './GestorMemoriaContigua';
 import type { IAsignadorMemoria } from './IAsignadorMemoria';
+import type { IBloqueMemoria } from './IBloqueMemoria';
 import type { IConfiguracion } from './IConfiguracion';
 import type { IConsultaMemoria } from './IConsultaMemoria';
 import type { IEventoES } from './IEventoES';
@@ -17,6 +18,7 @@ import { exigir } from './validaciones';
 
 type Memoria = IAsignadorMemoria & IConsultaMemoria;
 
+
 export class Simulador implements ISimulador, IConsultaSimulador {
   private tick = 0;
   private ticksCpuOcupada = 0;
@@ -27,11 +29,13 @@ export class Simulador implements ISimulador, IConsultaSimulador {
   private planificador!: IPlanificador;
   private gestorES!: IGestorES;
 
+
   constructor(memoria: Memoria, planificador: IPlanificador, gestorES: IGestorES) {
     this.establecerMemoria(memoria);
     this.establecerPlanificador(planificador);
     this.establecerGestorES(gestorES);
   }
+
 
   static crear(config: IConfiguracion): Simulador {
     const memoria = new GestorMemoriaContigua(config.obtenerMemoriaTotal(), config.obtenerEstrategia());
@@ -43,6 +47,7 @@ export class Simulador implements ISimulador, IConsultaSimulador {
     exigir(memoria <= this.obtenerMemoria().obtenerMemoriaTotal(), `P${pid} pide más memoria que la total`);
     this.obtenerListaProcesos().push(new Proceso(pid, memoria, cpu, eventoES));
   }
+
 
   avanzarTick(): void {
     this.faseAdmision();
@@ -57,6 +62,11 @@ export class Simulador implements ISimulador, IConsultaSimulador {
   obtenerMetricas(): IMetricas {
     return new MetricasSimulacion(this.obtenerMemoria(), this.obtenerTicksCpuOcupada(), this.obtenerTick(), this.obtenerCambiosContexto());
   }
+
+  obtenerEnEjecucion(): IProcesoInfo | null { return this.obtenerPlanificador().obtenerEnEjecucion(); }
+  obtenerListos(): ReadonlyArray<IProcesoInfo> { return this.obtenerPlanificador().obtenerListos(); }
+  obtenerBloqueados(): ReadonlyArray<IProcesoInfo> { return this.obtenerGestorES().obtenerBloqueados(); }
+  obtenerMapaMemoria(): ReadonlyArray<IBloqueMemoria> { return this.obtenerMemoria().obtenerMapa(); }
 
   estado(): string {
     const procesos = this.obtenerListaProcesos().map((p) => p.estado());
